@@ -1,6 +1,6 @@
 # codec_g723_1
 
-A high-performance **ITU-T G.723.1** speech codec for **Flutter** and **Dart**, powered by Dart Native Assets and an optimized pure C engine.
+**ITU-T G.723.1** speech codec for **Flutter** and **Dart**, powered by Dart Native Assets and an C engine.
 
 Supports both standard G.723.1 bitrates (6.3 kbps and 5.3 kbps), narrowband 8 kHz PCM and wideband 16 kHz PCM, chunked streaming file conversions with bounded memory footprint (<5 MB), and non-blocking background isolate execution with real-time progress updates and cancellation.
 
@@ -227,8 +227,41 @@ flutter run
 
 ---
 
+## Platform Support & Prerequisites
+
+Currently, this package is **actively tested on Android** (both 32-bit `armeabi-v7a` and 64-bit `arm64-v8a` physical devices). 
+
+Because the native backend is written in portable, self-contained **C99** and compiled via Dart's [Native Assets](https://dart.dev/interop/c-interop#native-assets) system (`package:native_toolchain_c`), it is architected to compile across all major desktop and mobile targets. Here is what is needed for each platform:
+
+| Platform | Verification Status | Toolchain Prerequisites | Build Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Android** | **Tested & Verified** | Android NDK (installed via Android Studio / SDK Manager) | Built automatically by Gradle & Flutter via NDK Clang |
+| **iOS** | Untested | macOS with Xcode & Command Line Tools (`xcode-select --install`) | Automatically compiled into the iOS App Framework via Apple Clang |
+| **macOS** | Untested | macOS with Xcode or Command Line Tools | Compiled into `libcodec_g723_1.dylib` automatically |
+| **Linux** | Untested | GCC or Clang (`sudo apt install build-essential clang`) | Compiled into `libcodec_g723_1.so` automatically |
+| **Windows** | Untested (host test passed) | Visual Studio with "Desktop development with C++" or MinGW-w64 | Compiled into `codec_g723_1.dll` automatically |
+| **Web** | Unsupported | N/A (Requires Wasm compilation pipeline) | `dart:ffi` Native Assets is not supported on web |
+
+### Building for Other Platforms
+
+1. **iOS / macOS**:
+   - Run `flutter run -d ios` or `flutter run -d macos` from a machine running macOS.
+   - Ensure CocoaPods and Xcode are configured. Native Assets handles the C compilation step transparently during the build.
+2. **Linux**:
+   - Ensure a C toolchain is installed (`build-essential` on Ubuntu/Debian).
+   - Run `flutter run -d linux`.
+3. **Windows**:
+   - Ensure Visual Studio C++ Build Tools (MSVC `cl.exe`) or MinGW-w64 GCC is in your system `PATH`.
+   - Run `flutter run -d windows`.
+
+> [!NOTE]
+> The C code has zero external library dependencies other than standard C runtime math (`-lm`). If you test on iOS, macOS, Windows, or Linux, please open an issue or pull request with your results!
+
+---
+
 ## License & Third-Party Notice
 
 This project is licensed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 
 Portions of this software are derived from or based on [`oxideav-g7231`](https://github.com/OxideAV/oxideav-g7231), also licensed under the MIT License. See [`THIRD_PARTY_LICENSE`](THIRD_PARTY_LICENSE) for complete copyright notices.
+
