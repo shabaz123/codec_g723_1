@@ -1,0 +1,21 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+name: CodecG723_1Bindings
+description: |
+  Bindings for `src/codec_g723_1.h`.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+compiler-opts:
+  - '--target=aarch64-linux-android'
+  - '--sysroot=C:\DEV\vhd_mounts\android\Sdk\ndk\28.2.13676358\toolchains\llvm\prebuilt\windows-x86_64\sysroot'
+  - '-isystem'
+  - 'C:\DEV\vhd_mounts\android\Sdk\ndk\28.2.13676358\toolchains\llvm\prebuilt\windows-x86_64\lib\clang\19\include'
+output: 'lib/codec_g723_1_bindings_generated.dart'
+headers:
+  entry-points:
+    - 'src/codec_g723_1.h'
+  include-directives:
+    - 'src/codec_g723_1.h'
+ffi-native:
+comments:
+  style: any
+  length: full
