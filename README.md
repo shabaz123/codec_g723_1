@@ -295,16 +295,40 @@ Because the native backend is written in portable, self-contained **C99** and co
 
 A complete example Flutter application demonstrating the codec is included in the [`example/`](example/) directory:
 
-- File pickers to choose input WAV or G.723.1 files.
-- Built-in test signal generator (8 kHz and 16 kHz).
-- Full conversion modes (PCM $\leftrightarrow$ G.723.1 and roundtrip).
-- Live progress indicator, background worker isolate execution, and responsive UI.
-- Detailed metrics card displaying processed frames, compression ratio, byte sizes, and frame type distribution.
+- **Interactive File Converter**: Convert between PCM WAV (8 kHz / 16 kHz) and G.723.1 (5.3 kbps / 6.3 kbps), with optional WAV container wrapper (`WAVE_FORMAT_MSG723`).
+- **Auto-Detecting Decoder**: Automatically reads both raw `.g723` bitstreams and RIFF `.wav` containers.
+- **Built-in Test Signal Generator**: Synthesizes 8 kHz and 16 kHz harmonic audio samples with a single click to test without external audio files.
+- **Non-blocking Background Isolates**: Conversion runs in background Dart isolates without freezing the UI thread, complete with real-time progress tracking and cancellation support.
+- **Detailed Metrics Card**: Displays processed frames, duration, byte sizes, compression ratio, and frame breakdown.
 
-To run the example app on an attached device:
+### Running the Example App
+
+> [!NOTE]
+> **Do you need to build the C library first?**
+> **No!** You do **not** need to run CMake or build any C libraries manually before running the Flutter app.
+> Flutter utilizes Dart's **Native Assets** system ([`hook/build.dart`](hook/build.dart)). When you run `flutter run` or `flutter build apk`, Flutter automatically invokes the native toolchain (such as Android NDK Clang) to compile the C sources (`src/`) and bundles the resulting library (`libcodec_g723_1.so`) directly into the app package.
+
+#### 1. Prerequisites (Android)
+- **Flutter SDK** (3.27+).
+- **Android SDK & NDK**: Ensure the Android NDK is installed via Android Studio (*Settings / Preferences > Appearance & Behavior > System Settings > Android SDK > SDK Tools > NDK (Side by side)*).
+- An attached physical Android device (with USB debugging enabled) or an active Android Virtual Device (AVD).
+
+#### 2. Get Dependencies & Launch
+From the repository root:
 
 ```bash
 cd example
+flutter pub get
+flutter run
+```
+
+#### 3. Clean & Rebuild (Troubleshooting)
+If you switch devices, update C source files, or encounter cached build artifacts, clean the workspace and re-fetch dependencies:
+
+```bash
+cd example
+flutter clean
+flutter pub get
 flutter run
 ```
 
