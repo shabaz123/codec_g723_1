@@ -1,6 +1,6 @@
 # codec_g723_1
 
-A portable, high-performance **ITU-T G.723.1** speech codec implemented in **C99**, with first-class **Flutter / Dart** and **Python** bindings.
+A portable, high-performance **ITU-T G.723.1** speech codec implemented in **C99**, all ready for using with C/C++ applications, or use it with **Flutter / Dart** or with **Python**.
 
 Supports both standardized G.723.1 bitrates (6.3 kbps and 5.3 kbps), narrowband 8 kHz and wideband 16 kHz PCM, chunked streaming file conversions with bounded memory footprint (<5 MB), and non-blocking background isolate execution.
 
