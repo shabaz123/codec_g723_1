@@ -161,6 +161,86 @@ class TestG723Codec(unittest.TestCase):
                 self.assertEqual(wf.getframerate(), 8000)
                 self.assertEqual(wf.getnframes(), frames_dec * 240)
 
+    def test_wav_container_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wav_in = os.path.join(tmpdir, "input.wav")
+            g723_wav = os.path.join(tmpdir, "encoded.wav")
+            wav_out = os.path.join(tmpdir, "decoded.wav")
+
+            samples = array.array('h', [
+                int(max(-32768, min(32767, round(5000.0 * math.sin(2.0 * math.pi * 350.0 * i / 8000.0)))))
+                for i in range(4800) # 20 frames
+            ])
+
+            with wave.open(wav_in, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(8000)
+                wf.writeframes(samples.tobytes())
+
+            # Encode to G.723.1 with WAV container
+            frames_enc = encode_wav_to_g723(wav_in, g723_wav, bitrate=G723Bitrate.KBPS_63, wav_header=True)
+            self.assertEqual(frames_enc, 20)
+            self.assertEqual(os.path.getsize(g723_wav), 44 + 20 * 24)
+
+            with open(g723_wav, "rb") as f:
+                header = f.read(44)
+                self.assertEqual(header[:4], b"RIFF")
+                self.assertEqual(header[8:12], b"WAVE")
+                self.assertEqual(header[12:16], b"fmt ")
+                import struct
+                format_tag = struct.unpack("<H", header[20:22])[0]
+                self.assertEqual(format_tag, 0x0042)
+
+            # Auto-detect WAV container and decode back to PCM WAV
+            frames_dec = decode_g723_to_wav(g723_wav, wav_out, sample_rate=8000, wav_header=True)
+            self.assertEqual(frames_dec, 20)
+            self.assertTrue(os.path.isfile(wav_out))
+            with wave.open(wav_out, "rb") as wf:
+                self.assertEqual(wf.getnframes(), 20 * 240)
+
+    def test_codec_demo_cli(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wav_in = os.path.join(tmpdir, "input.wav")
+            g723_wav = os.path.join(tmpdir, "enc_wav.wav")
+            g723_raw = os.path.join(tmpdir, "enc_raw.g723")
+            pcm_wav = os.path.join(tmpdir, "dec_pcm.wav")
+            pcm_raw = os.path.join(tmpdir, "dec_raw.pcm")
+
+            samples = array.array('h', [
+                int(max(-32768, min(32767, round(4000.0 * math.sin(2.0 * math.pi * 400.0 * i / 8000.0)))))
+                for i in range(2400) # 10 frames
+            ])
+
+            with wave.open(wav_in, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(8000)
+                wf.writeframes(samples.tobytes())
+
+            demo_py = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "codec_demo.py"))
+
+            # 1. Encode with WAV header
+            r1 = subprocess.run([sys.executable, demo_py, "--to6.3k", "--wav", wav_in, "-o", g723_wav], capture_output=True, text=True)
+            self.assertEqual(r1.returncode, 0, r1.stderr)
+            self.assertEqual(os.path.getsize(g723_wav), 44 + 10 * 24)
+
+            # 2. Decode WAV container G.723.1 to WAV
+            r2 = subprocess.run([sys.executable, demo_py, "--to8kpcm", "--wav", g723_wav, "-o", pcm_wav], capture_output=True, text=True)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            self.assertTrue(os.path.isfile(pcm_wav))
+
+            # 3. Encode to raw G.723.1 5.3k
+            r3 = subprocess.run([sys.executable, demo_py, "--to5.3k", wav_in, "-o", g723_raw], capture_output=True, text=True)
+            self.assertEqual(r3.returncode, 0, r3.stderr)
+            self.assertEqual(os.path.getsize(g723_raw), 10 * 20)
+
+            # 4. Decode raw G.723.1 to raw PCM
+            r4 = subprocess.run([sys.executable, demo_py, "--to8kpcm", g723_raw, "-o", pcm_raw], capture_output=True, text=True)
+            self.assertEqual(r4.returncode, 0, r4.stderr)
+            self.assertEqual(os.path.getsize(pcm_raw), 10 * 240 * 2)
+
 
 if __name__ == "__main__":
     unittest.main()

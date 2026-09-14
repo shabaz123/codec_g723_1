@@ -125,6 +125,7 @@ class _ConverterConfig {
     required this.destinationPath,
     required this.replyPort,
     this.progressPort,
+    this.outputWavHeader = false,
   });
 
   final G723ConversionMode mode;
@@ -132,6 +133,7 @@ class _ConverterConfig {
   final String destinationPath;
   final SendPort replyPort;
   final SendPort? progressPort;
+  final bool outputWavHeader;
 }
 
 class _ProgressMessage {
@@ -153,10 +155,13 @@ abstract final class G723FileConverter {
   /// Memory footprint is strictly bounded (<5 MB) regardless of audio file duration.
   /// Periodic progress updates are delivered via [onProgress].
   /// Ongoing conversions can be cancelled using [cancellationToken].
+  /// If [outputWavHeader] is true and mode encodes to G.723.1, outputs a RIFF WAVE
+  /// header with format tag 0x0042 (WAVE_FORMAT_MSG723).
   static Future<G723ConversionResult> convert({
     required G723ConversionMode mode,
     required String sourcePath,
     required String destinationPath,
+    bool outputWavHeader = false,
     void Function(double progress, String status)? onProgress,
     G723CancellationToken? cancellationToken,
   }) async {
@@ -209,6 +214,7 @@ abstract final class G723FileConverter {
       destinationPath: destinationPath,
       replyPort: replyPort.sendPort,
       progressPort: progressSendPort,
+      outputWavHeader: outputWavHeader,
     );
 
     Isolate? isolate;
@@ -309,6 +315,7 @@ abstract final class G723FileConverter {
         mode: config.mode,
         sourcePath: config.sourcePath,
         destinationPath: config.destinationPath,
+        outputWavHeader: config.outputWavHeader,
         onProgress: (progress, status) {
           config.progressPort?.send(_ProgressMessage(progress, status));
         },
@@ -326,6 +333,7 @@ abstract final class G723FileConverter {
     required G723ConversionMode mode,
     required String sourcePath,
     required String destinationPath,
+    bool outputWavHeader = false,
     void Function(double progress, String status)? onProgress,
   }) {
     final sourceFile = File(sourcePath);
@@ -352,6 +360,7 @@ abstract final class G723FileConverter {
           sourceFile: sourceFile,
           destFile: destFile,
           bitrate: G723Bitrate.kbps53,
+          outputWavHeader: outputWavHeader,
           onProgress: onProgress,
         );
 
@@ -360,6 +369,7 @@ abstract final class G723FileConverter {
           sourceFile: sourceFile,
           destFile: destFile,
           bitrate: G723Bitrate.kbps63,
+          outputWavHeader: outputWavHeader,
           onProgress: onProgress,
         );
 
@@ -401,11 +411,16 @@ abstract final class G723FileConverter {
     required File sourceFile,
     required File destFile,
     required G723Bitrate bitrate,
+    bool outputWavHeader = false,
     void Function(double progress, String status)? onProgress,
   }) {
     final inputTotalBytes = sourceFile.lengthSync();
     final source = sourceFile.openSync(mode: FileMode.read);
     final dest = destFile.openSync(mode: FileMode.write);
+
+    if (outputWavHeader) {
+      dest.writeFromSync(Uint8List(44));
+    }
 
     G723Encoder? encoder;
     try {
@@ -483,6 +498,17 @@ abstract final class G723FileConverter {
         }
       }
 
+      if (outputWavHeader) {
+        final g723Header = WavHeader.createG723Header(
+          sampleRate: wavHeader.sampleRate,
+          bitrate: bitrate.bitsPerSecond,
+          totalBytes: totalOutputBytes,
+        );
+        dest.setPositionSync(0);
+        dest.writeFromSync(g723Header);
+        totalOutputBytes += 44;
+      }
+
       final duration = framesProcessed * 0.030;
       final ratio = totalOutputBytes > 0 ? inputTotalBytes / totalOutputBytes : 0.0;
 
@@ -520,6 +546,16 @@ abstract final class G723FileConverter {
     // Reserve 44 bytes for WAV header
     dest.writeFromSync(Uint8List(44));
 
+    // Auto-detect if input has a WAV header container
+    int dataStartPos = 0;
+    int dataEndPos = inputTotalBytes;
+    if (WavHeader.isWavFile(source)) {
+      final wavHeader = WavHeader.readHeader(source, allowG723: true);
+      dataStartPos = wavHeader.dataOffset;
+      dataEndPos = wavHeader.dataOffset + wavHeader.dataBytes;
+      source.setPositionSync(dataStartPos);
+    }
+
     G723Decoder? decoder;
     try {
       decoder = G723Decoder(sampleRate: targetSampleRate);
@@ -550,8 +586,13 @@ abstract final class G723FileConverter {
         bufferLen = remainingInBuffer;
         bufferOffset = 0;
 
-        // Fill remaining buffer from file
-        final bytesRead = source.readIntoSync(readBuffer, bufferLen, readChunkSize);
+        // Fill remaining buffer from file up to dataEndPos
+        final currentFilePos = source.positionSync();
+        final bytesLeftToRead = math.max(0, dataEndPos - currentFilePos);
+        final bytesToRequest = math.min(readChunkSize - bufferLen, bytesLeftToRead);
+        final bytesRead = bytesToRequest > 0
+            ? source.readIntoSync(readBuffer, bufferLen, bufferLen + bytesToRequest)
+            : 0;
         bufferLen += bytesRead;
 
         if (bufferLen == 0) break;
@@ -604,7 +645,11 @@ abstract final class G723FileConverter {
 
           if (onProgress != null && framesProcessed % 32 == 0) {
             final filePos = source.positionSync() - (bufferLen - bufferOffset);
-            final prog = inputTotalBytes > 0 ? (filePos / inputTotalBytes).clamp(0.0, 1.0) : 0.0;
+            final currentProcessed = filePos - dataStartPos;
+            final totalToProcess = dataEndPos - dataStartPos;
+            final prog = totalToProcess > 0
+                ? (currentProcessed / totalToProcess).clamp(0.0, 1.0)
+                : 0.0;
             onProgress(prog, 'Decoding frame $framesProcessed...');
           }
         }

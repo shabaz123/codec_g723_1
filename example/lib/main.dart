@@ -55,6 +55,7 @@ class _G723ConverterHomePageState extends State<G723ConverterHomePage> {
   final TextEditingController _destFilenameController = TextEditingController();
 
   bool _isConverting = false;
+  bool _outputWavHeader = false;
   double _progress = 0.0;
   String _statusText = '';
   ConversionResult? _lastResult;
@@ -93,10 +94,14 @@ class _G723ConverterHomePageState extends State<G723ConverterHomePage> {
 
     switch (_selectedMode) {
       case ConversionMode.pcmToG723_53k:
-        _destFilenameController.text = '${baseName}_5.3k.g723';
+        _destFilenameController.text = _outputWavHeader
+            ? '${baseName}_5.3k.wav'
+            : '${baseName}_5.3k.g723';
         break;
       case ConversionMode.pcmToG723_63k:
-        _destFilenameController.text = '${baseName}_6.3k.g723';
+        _destFilenameController.text = _outputWavHeader
+            ? '${baseName}_6.3k.wav'
+            : '${baseName}_6.3k.g723';
         break;
       case ConversionMode.g723ToPcm8k:
         _destFilenameController.text = '${baseName}_decoded_8k.wav';
@@ -117,7 +122,7 @@ class _G723ConverterHomePageState extends State<G723ConverterHomePage> {
     try {
       final allowedExts = _selectedMode.sourceIsWav
           ? ['wav']
-          : ['g723', 'bin', 'raw'];
+          : ['g723', 'wav', 'bin', 'raw'];
 
       final file = await FilePicker.pickFile(
         type: FileType.custom,
@@ -222,6 +227,7 @@ class _G723ConverterHomePageState extends State<G723ConverterHomePage> {
         mode: _selectedMode,
         sourcePath: source,
         destinationPath: destinationPath,
+        outputWavHeader: _outputWavHeader,
         cancellationToken: token,
         onProgress: (prog, status) {
           if (!mounted) return;
@@ -545,6 +551,26 @@ class _G723ConverterHomePageState extends State<G723ConverterHomePage> {
                 isDense: true,
               ),
             ),
+            if (_selectedMode == ConversionMode.pcmToG723_53k ||
+                _selectedMode == ConversionMode.pcmToG723_63k) ...[
+              const SizedBox(height: 12),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Save inside WAV container'),
+                subtitle: const Text(
+                  'Wraps G.723.1 bitstream in RIFF WAVE container (format tag 0x0042 / WAVE_FORMAT_MSG723)',
+                ),
+                value: _outputWavHeader,
+                onChanged: _isConverting
+                    ? null
+                    : (val) {
+                        setState(() {
+                          _outputWavHeader = val;
+                          _updateDefaultDestinationFilename();
+                        });
+                      },
+              ),
+            ],
           ],
         ),
       ),

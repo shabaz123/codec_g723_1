@@ -142,8 +142,11 @@ from codec_g723_1 import (
 )
 
 # 1. Convert whole WAV files to G.723.1 bitstream and back
-encode_wav_to_g723("input.wav", "audio.g723", bitrate=G723Bitrate.KBPS_63)
-decode_g723_to_wav("audio.g723", "output.wav", sample_rate=8000)
+# Pass wav_header=True to wrap the G.723.1 bitstream in a RIFF WAVE container (format tag 0x0042)
+encode_wav_to_g723("input.wav", "audio.g723", bitrate=G723Bitrate.KBPS_63, wav_header=False)
+
+# Decoder automatically detects whether input is raw G.723.1 or wrapped in a WAV container!
+decode_g723_to_wav("audio.g723", "output.wav", sample_rate=8000, wav_header=True)
 
 # 2. Real-time frame processing
 with G723Encoder(bitrate=G723Bitrate.KBPS_63, sample_rate=8000) as enc, \
@@ -157,6 +160,24 @@ with G723Encoder(bitrate=G723Bitrate.KBPS_63, sample_rate=8000) as enc, \
 
     # Decode back to raw 16-bit PCM bytes (480 bytes = 240 samples)
     pcm_out = dec.decode_frame(packet)
+```
+
+### Python CLI Demo (`codec_demo.py`)
+
+A standalone CLI tool is included in `python/codec_demo.py`:
+
+```bash
+# Encode 8k/16k PCM WAV to raw 6.3 kbps G.723.1
+python python/codec_demo.py --to6.3k input.wav
+
+# Encode PCM WAV to 5.3 kbps inside a RIFF WAVE container (format tag 0x0042)
+python python/codec_demo.py --to5.3k --wav input.wav
+
+# Decode G.723.1 (raw or WAV container, auto-detected) to 8 kHz PCM WAV
+python python/codec_demo.py --to8kpcm --wav input.g723
+
+# Decode G.723.1 to raw 16-bit 8 kHz PCM (no WAV header)
+python python/codec_demo.py --to8kpcm input.g723
 ```
 
 To run the Python test suite:

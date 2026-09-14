@@ -24,11 +24,11 @@ def find_library_path() -> str:
 
     # Determine standard library filenames by OS
     if sys.platform == "win32":
-        lib_names = ["g723_1.dll", "libg723_1.dll"]
+        lib_names = ["g723_1.dll", "libg723_1.dll", "codec_g723_1.dll"]
     elif sys.platform == "darwin":
-        lib_names = ["libg723_1.dylib", "g723_1.dylib"]
+        lib_names = ["libg723_1.dylib", "g723_1.dylib", "libcodec_g723_1.dylib"]
     else:
-        lib_names = ["libg723_1.so", "g723_1.so"]
+        lib_names = ["libg723_1.so", "g723_1.so", "libcodec_g723_1.so"]
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
@@ -41,6 +41,8 @@ def find_library_path() -> str:
         os.path.join(project_root, "build_cmake"),
         os.path.join(project_root, "build_cmake", "Release"),
         os.path.join(project_root, "build_cmake", "Debug"),
+        os.path.join(project_root, ".dart_tool", "lib"),
+        os.path.join(project_root, "example", "build", "native_assets", "windows"),
     ]
 
     for directory in search_dirs:

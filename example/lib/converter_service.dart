@@ -13,6 +13,7 @@ abstract final class ConverterService {
     required ConversionMode mode,
     required String sourcePath,
     required String destinationPath,
+    bool outputWavHeader = false,
     void Function(double progress, String status)? onProgress,
     G723CancellationToken? cancellationToken,
   }) {
@@ -20,6 +21,7 @@ abstract final class ConverterService {
       mode: mode,
       sourcePath: sourcePath,
       destinationPath: destinationPath,
+      outputWavHeader: outputWavHeader,
       onProgress: onProgress,
       cancellationToken: cancellationToken,
     );

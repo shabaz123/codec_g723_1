@@ -586,6 +586,47 @@ void main() {
       expect(result.success, isFalse);
       expect(result.errorMessage, contains('cancelled'));
     });
+
+    test('G.723.1 WAV container encode and auto-detect decode in isolate', () async {
+      final destG723Wav = '${tempDir.path}/pkg_out_container.wav';
+      final destDecWav = '${tempDir.path}/pkg_dec_from_container.wav';
+
+      final encResult = await G723FileConverter.convert(
+        mode: G723ConversionMode.pcmToG723_63k,
+        sourcePath: wav8kPath,
+        destinationPath: destG723Wav,
+        outputWavHeader: true,
+      );
+
+      expect(encResult.success, isTrue);
+      expect(File(destG723Wav).existsSync(), isTrue);
+
+      final raf = File(destG723Wav).openSync();
+      try {
+        expect(WavHeader.isWavFile(raf), isTrue);
+        final header = WavHeader.readHeader(raf, allowG723: true);
+        expect(header.isG723, isTrue);
+        expect(header.audioFormat, equals(0x0042));
+        expect(header.dataBytes, equals(encResult.framesProcessed * 24));
+      } finally {
+        raf.closeSync();
+      }
+
+      // Decode with auto-detection of the WAV container
+      final decResult = await G723FileConverter.convert(
+        mode: G723ConversionMode.g723ToPcm8k,
+        sourcePath: destG723Wav,
+        destinationPath: destDecWav,
+      );
+
+      expect(decResult.success, isTrue);
+      expect(decResult.framesProcessed, equals(encResult.framesProcessed));
+      expect(File(destDecWav).existsSync(), isTrue);
+
+      final decWav = WavAudio.readWav(File(destDecWav).readAsBytesSync());
+      expect(decWav.sampleRate, equals(8000));
+      expect(decWav.samples.length, equals(encResult.framesProcessed * 240));
+    });
   });
 }
 

@@ -241,14 +241,59 @@ class G723Decoder:
             pass
 
 
+def create_g723_wav_header(sample_rate: int, bitrate: int, total_bytes: int) -> bytes:
+    """Creates a canonical 44-byte RIFF WAVE header for G.723.1 (tag 0x0042 / WAVE_FORMAT_MSG723)."""
+    import struct
+    block_align = 20 if bitrate == 5300 else 24
+    byte_rate = 667 if bitrate == 5300 else 800
+    chunk_size = 36 + total_bytes
+    return struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        min(0xFFFFFFFF, chunk_size),
+        b"WAVE",
+        b"fmt ",
+        16,      # fmt chunk size
+        0x0042,  # audio format = WAVE_FORMAT_MSG723
+        1,       # 1 channel
+        sample_rate,
+        byte_rate,
+        block_align,
+        0,       # bits per sample = 0
+        b"data",
+        min(0xFFFFFFFF, total_bytes),
+    )
+
+
+def extract_g723_payload(data: bytes) -> bytes:
+    """If data starts with a RIFF WAVE header, extracts the 'data' chunk payload.
+    Otherwise returns data as-is (raw bitstream).
+    """
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        import struct
+        offset = 12
+        while offset + 8 <= len(data):
+            chunk_id = data[offset : offset + 4]
+            chunk_size = struct.unpack("<I", data[offset + 4 : offset + 8])[0]
+            offset += 8
+            if chunk_id == b"data":
+                return data[offset : offset + chunk_size]
+            offset += chunk_size
+            if chunk_size % 2 != 0:
+                offset += 1
+    return data
+
+
 def encode_wav_to_g723(
     wav_path: str,
     g723_path: str,
     bitrate: Union[int, G723Bitrate] = G723Bitrate.KBPS_63,
+    wav_header: bool = False,
     progress_callback=None,
 ) -> int:
     """Encodes a 16-bit Mono WAV file (8 kHz or 16 kHz) into a G.723.1 bitstream file.
 
+    If wav_header is True, wraps the bitstream in a canonical RIFF WAVE header (tag 0x0042).
     Returns the number of frames processed.
     """
     with wave.open(wav_path, "rb") as wf:
@@ -280,8 +325,12 @@ def encode_wav_to_g723(
         bytes_per_frame = samples_per_frame * 2
         total_frames = (len(raw_pcm) + bytes_per_frame - 1) // bytes_per_frame
 
-        with open(g723_path, "wb") as out_f:
+        with open(g723_path, "wb+") as out_f:
+            if wav_header:
+                out_f.write(b"\x00" * 44)
+
             frames_processed = 0
+            total_output_bytes = 0
             for offset in range(0, len(raw_pcm), bytes_per_frame):
                 chunk = raw_pcm[offset : offset + bytes_per_frame]
                 if len(chunk) < bytes_per_frame:
@@ -289,10 +338,16 @@ def encode_wav_to_g723(
 
                 encoded = encoder.encode_frame(chunk)
                 out_f.write(encoded)
+                total_output_bytes += len(encoded)
                 frames_processed += 1
 
                 if progress_callback and (frames_processed % 32 == 0 or frames_processed == total_frames):
                     progress_callback(frames_processed, total_frames)
+
+            if wav_header:
+                hdr = create_g723_wav_header(sample_rate, int(bitrate), total_output_bytes)
+                out_f.seek(0)
+                out_f.write(hdr)
 
         return frames_processed
 
@@ -301,14 +356,19 @@ def decode_g723_to_wav(
     g723_path: str,
     wav_path: str,
     sample_rate: int = 8000,
+    wav_header: bool = True,
     progress_callback=None,
 ) -> int:
-    """Decodes a G.723.1 bitstream file into a canonical 16-bit Mono WAV file.
+    """Decodes a G.723.1 bitstream file (raw or WAV-wrapped) into 16-bit linear PCM audio.
 
+    If wav_header is True (default), writes a canonical 16-bit Mono WAV file.
+    If wav_header is False, writes raw PCM samples without a header.
     Returns the number of frames processed.
     """
     with open(g723_path, "rb") as f:
-        data = f.read()
+        raw_data = f.read()
+
+    data = extract_g723_payload(raw_data)
 
     with G723Decoder(sample_rate=sample_rate) as decoder:
         pcm_chunks = []
@@ -340,10 +400,14 @@ def decode_g723_to_wav(
                 progress_callback(offset, total_bytes)
 
         pcm_all = b"".join(pcm_chunks)
-        with wave.open(wav_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(pcm_all)
+        if wav_header:
+            with wave.open(wav_path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(pcm_all)
+        else:
+            with open(wav_path, "wb") as pf:
+                pf.write(pcm_all)
 
         return frames_processed

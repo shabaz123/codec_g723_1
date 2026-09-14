@@ -165,5 +165,35 @@ void main() {
       expect(wav.sampleRate, equals(16000));
       expect(wav.samples.length, equals(result.framesProcessed * 480));
     });
+
+    test('WAV container G.723.1 encode and decode', () async {
+      final g723WavPath = '${tempDir.path}/output_container_63k.wav';
+      final pcmDecWavPath = '${tempDir.path}/decoded_from_container_8k.wav';
+
+      final encResult = await ConverterService.convert(
+        mode: ConversionMode.pcmToG723_63k,
+        sourcePath: wav8kPath,
+        destinationPath: g723WavPath,
+        outputWavHeader: true,
+      );
+
+      expect(encResult.success, isTrue);
+      expect(File(g723WavPath).existsSync(), isTrue);
+      expect(encResult.outputBytes, equals(44 + encResult.framesProcessed * 24));
+
+      final decResult = await ConverterService.convert(
+        mode: ConversionMode.g723ToPcm8k,
+        sourcePath: g723WavPath,
+        destinationPath: pcmDecWavPath,
+      );
+
+      expect(decResult.success, isTrue);
+      expect(decResult.framesProcessed, equals(encResult.framesProcessed));
+      expect(File(pcmDecWavPath).existsSync(), isTrue);
+
+      final wav = WavAudio.readWav(File(pcmDecWavPath).readAsBytesSync());
+      expect(wav.sampleRate, equals(8000));
+      expect(wav.samples.length, equals(encResult.framesProcessed * 240));
+    });
   });
 }

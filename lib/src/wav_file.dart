@@ -20,12 +20,40 @@ class WavHeader {
   final int dataOffset;
   final int dataBytes;
 
-  int get totalSamples => dataBytes ~/ (numChannels * (bitsPerSample ~/ 8));
+  int get totalSamples => (bitsPerSample > 0 && numChannels > 0)
+      ? dataBytes ~/ (numChannels * (bitsPerSample ~/ 8))
+      : 0;
+
+  bool get isPcm => audioFormat == 1;
+  bool get isG723 => audioFormat == 0x0042 || audioFormat == 0x0014;
+
+  /// Returns true if the file begins with the 12-byte "RIFF....WAVE" signature.
+  static bool isWavFile(RandomAccessFile file) {
+    final curPos = file.positionSync();
+    try {
+      if (file.lengthSync() < 12) return false;
+      file.setPositionSync(0);
+      final buf = file.readSync(12);
+      if (buf.length < 12) return false;
+      return buf[0] == 0x52 &&
+          buf[1] == 0x49 &&
+          buf[2] == 0x46 &&
+          buf[3] == 0x46 &&
+          buf[8] == 0x57 &&
+          buf[9] == 0x41 &&
+          buf[10] == 0x56 &&
+          buf[11] == 0x45;
+    } catch (_) {
+      return false;
+    } finally {
+      file.setPositionSync(curPos);
+    }
+  }
 
   /// Reads and parses the RIFF header from an open [RandomAccessFile].
   ///
   /// Resets position to [dataOffset] upon successful return.
-  static WavHeader readHeader(RandomAccessFile file) {
+  static WavHeader readHeader(RandomAccessFile file, {bool allowG723 = false}) {
     final fileLength = file.lengthSync();
     if (fileLength < 44) {
       throw const FormatException('File is too small to be a valid WAV file.');
@@ -103,14 +131,19 @@ class WavHeader {
     if (dataOffset == null || dataBytes == null) {
       throw const FormatException('Missing "data" chunk in WAV file.');
     }
-    if (audioFormat != 1) {
+    if (!allowG723 && audioFormat != 1) {
       throw FormatException(
         'Unsupported WAV audio format $audioFormat. Only uncompressed PCM (format 1) is supported.',
       );
     }
-    if (bitsPerSample != 16) {
+    if (audioFormat == 1 && bitsPerSample != 16) {
       throw FormatException(
         'Unsupported bit depth ($bitsPerSample-bit). Only 16-bit PCM WAV is supported.',
+      );
+    }
+    if (allowG723 && audioFormat != 1 && audioFormat != 0x0042 && audioFormat != 0x0014) {
+      throw FormatException(
+        'Unsupported WAV audio format $audioFormat. Expected PCM (1) or G.723.1 (0x0042 / 0x0014).',
       );
     }
     if (numChannels != 1 && numChannels != 2) {
@@ -168,6 +201,41 @@ class WavHeader {
     // data chunk
     bytes.setRange(36, 40, 'data'.codeUnits);
     byteData.setUint32(40, subChunk2Size > 0xFFFFFFFF ? 0xFFFFFFFF : subChunk2Size, Endian.little);
+
+    return bytes;
+  }
+
+  /// Creates a canonical 44-byte RIFF WAVE header for G.723.1 bitstream (format tag 0x0042 / WAVE_FORMAT_MSG723).
+  static Uint8List createG723Header({
+    required int sampleRate,
+    int bitrate = 6300,
+    required int totalBytes,
+  }) {
+    final chunkSize = 36 + totalBytes;
+    final blockAlign = bitrate == 5300 ? 20 : 24;
+    final byteRate = bitrate == 5300 ? 667 : 800;
+
+    final bytes = Uint8List(44);
+    final byteData = ByteData.sublistView(bytes);
+
+    // RIFF header
+    bytes.setRange(0, 4, 'RIFF'.codeUnits);
+    byteData.setUint32(4, chunkSize > 0xFFFFFFFF ? 0xFFFFFFFF : chunkSize, Endian.little);
+    bytes.setRange(8, 12, 'WAVE'.codeUnits);
+
+    // fmt chunk
+    bytes.setRange(12, 16, 'fmt '.codeUnits);
+    byteData.setUint32(16, 16, Endian.little); // Subchunk1Size = 16
+    byteData.setUint16(20, 0x0042, Endian.little); // AudioFormat: 0x0042 (WAVE_FORMAT_MSG723)
+    byteData.setUint16(22, 1, Endian.little); // 1 channel
+    byteData.setUint32(24, sampleRate, Endian.little);
+    byteData.setUint32(28, byteRate, Endian.little);
+    byteData.setUint16(32, blockAlign, Endian.little);
+    byteData.setUint16(34, 0, Endian.little); // BitsPerSample: 0 for compressed
+
+    // data chunk
+    bytes.setRange(36, 40, 'data'.codeUnits);
+    byteData.setUint32(40, totalBytes > 0xFFFFFFFF ? 0xFFFFFFFF : totalBytes, Endian.little);
 
     return bytes;
   }
