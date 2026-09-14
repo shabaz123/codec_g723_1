@@ -20,6 +20,7 @@ const _sources = [
 ];
 
 const _includes = [
+  'include',
   'src',
   'src/backends/c',
 ];

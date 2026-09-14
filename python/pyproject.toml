@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codec_g723_1"
+version = "0.1.0"
+description = "Python bindings for the high-performance ITU-T G.723.1 speech codec."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Shabaz"}
+]
+keywords = ["audio", "codec", "g723", "voip", "speech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+]
+
+[project.urls]
+Homepage = "https://github.com/shabaz123/codec_g723_1"
+Repository = "https://github.com/shabaz123/codec_g723_1"
